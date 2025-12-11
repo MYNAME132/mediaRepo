@@ -6,6 +6,63 @@ A **microservices-based media management platform** built with Node.js/NestJS. T
 ---
 
 ## 🏗 Project Structure
+mediaRepo/
+├── api-gateway/               # API Gateway service
+│   ├── src/
+│   │   ├── main.ts            # Entry point
+│   │   ├── app.module.ts
+│   │   ├── app.controller.ts
+│   │   └── app.service.ts
+│   ├── .env                    # Environment variables for gateway
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── user-service/              # User authentication & profile management
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── app.module.ts
+│   │   ├── users/
+│   │   │   ├── users.controller.ts
+│   │   │   ├── users.service.ts
+│   │   │   └── users.entity.ts
+│   │   └── auth/
+│   │       ├── auth.controller.ts
+│   │       └── auth.service.ts
+│   ├── .env
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── media-service/             # Media CRUD, metadata, signed URLs
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── app.module.ts
+│   │   ├── media/
+│   │   │   ├── media.controller.ts
+│   │   │   ├── media.service.ts
+│   │   │   └── media.entity.ts
+│   │   └── utils/
+│   │       └── storage.service.ts
+│   ├── .env
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── processing-service/        # Background jobs: thumbnails, media processing
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── app.module.ts
+│   │   ├── jobs/
+│   │   │   ├── process.controller.ts
+│   │   │   └── process.service.ts
+│   │   └── workers/
+│   │       └── media-processor.ts
+│   ├── .env
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── docker-compose.yml         # Orchestrates all services & dependencies
+├── README.md
+└── .gitignore
+
 ---
 
 ## ⚙️ Services Overview
