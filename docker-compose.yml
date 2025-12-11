@@ -1,0 +1,167 @@
+version: "3.9"
+
+services:
+  # ----------------------------------------
+  # User DB
+  # ----------------------------------------
+  user-db:
+    image: postgres:latest
+    container_name: user_db
+    environment:
+      POSTGRES_DB: user_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: "1234"
+    ports:
+      - "5434:5432"
+
+  # ----------------------------------------
+  # Media DB
+  # ----------------------------------------
+  media-db:
+    image: postgres:latest
+    container_name: media_db
+    environment:
+      POSTGRES_DB: media_db
+      POSTGRES_USER: media
+      POSTGRES_PASSWORD: "1234"
+    ports:
+      - "5435:5432"
+  # ----------------------------------------
+  # Media DB
+  # ----------------------------------------
+  outbox-db:
+    image: postgres:latest
+    container_name: outbox_db
+    environment:
+      POSTGRES_DB: outbox_db
+      POSTGRES_USER: outbox
+      POSTGRES_PASSWORD: "1234"
+    ports:
+      - "5436:5432"
+  # ----------------------------------------
+  # Redis for caching
+  # ----------------------------------------
+  redis:
+    image: redis:7
+    container_name: redis
+    command: [ "redis-server", "--databases", "16" ]
+    ports:
+      - "6379:6379"
+  # ----------------------------------------
+  # MinIO for media storage
+  # ----------------------------------------
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+  # ----------------------------------------
+  # User Service
+  # ----------------------------------------
+  user-service:
+    build: ./user-service
+    container_name: user_service
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      DATABASE_HOST: user-db
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: user
+      DATABASE_PASSWORD: 1234
+      DATABASE_NAME: user_db
+      JWT_SECRET: e9d3fbb9c6a57a3e5d8e9b4ffdc3e5b1f7b9a03e1e5d4c3fa7b3c4f1d8e9b4d6
+    ports:
+      - "3001:3000"
+    depends_on:
+      - user-db
+    volumes:
+      - ./user-service:/app
+      - /app/node_modules
+  # ----------------------------------------
+  # Media Service
+  # ----------------------------------------
+  media-service:
+    build: ./media-service
+    container_name: media_service
+    environment:
+      DATABASE_URL: postgres://media:1234@media-db:5432/media_db
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+    ports:
+      - "3002:3000"
+    depends_on:
+      - media-db
+      - minio
+    volumes:
+      - ./media-service:/app
+      - ./media-service/node_modules:/app/node_modules
+  # ----------------------------------------
+  # Processing Service
+  # ----------------------------------------
+  processing-service:
+    build: ./processing-service
+    container_name: processing_service
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      - WATCHPACK_POLLING=true
+      - MEDIA_SERVICE_URL=http://media-service:3000
+      - OUTBOX_DB_URL=postgres://outbox:1234@outbox_db:5432/outbox_db
+      - REDIS_OUTBOX_URL=redis://redis:6379/2
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./processing-service:/app
+  # ----------------------------------------
+  # API Gateway
+  # ----------------------------------------
+  api-gateway:
+    build: ./api-gateway
+    container_name: api_gateway
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      TS_NODE_DEV_POLLING: "true"
+      TS_NODE_TRANSPILE_ONLY: "true"
+      WATCHPACK_POLLING: "true"
+      AUTH_SERVICE_URL: http://user-service:3001
+      MEDIA_SERVICE_URL: http://media-service:3000
+      PROCESSING_SERVICE_URL: http://processing-service:3000
+      JWT_SECRET: e9d3fbb9c6a57a3e5d8e9b4ffdc3e5b1f7b9a03e1e5d4c3fa7b3c4f1d8e9b4d6
+    depends_on:
+      - user-service
+      - media-service
+      - processing-service
+    volumes:
+      - ./api-gateway:/app
+  # ----------------------------------------
+  # Ollama Service
+  # ----------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # Enable GPU if NVIDIA runtime is installed:
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+
+    # ----------------------------------------
+    # Volumes
+    # ----------------------------------------
+volumes:
+  ollama-models:
