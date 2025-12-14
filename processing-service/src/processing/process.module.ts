@@ -6,9 +6,15 @@ import { AIService } from '../processing/aibuffer';
 import { MediaClientService } from '../http-service/media.service';
 import { MediaUploadService } from '../http-service/media-update.service';
 import { OutboxModule } from '../outbox/outbox.module';
+import { HttpOutboxService } from '../outbox/outbox.service';
+import { RedisModule } from '../config/redis.module';
+import { Outbox } from '../outbox/entity/outbox.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 @Module({
-    imports: [OutboxModule],
+    imports: [OutboxModule,TypeOrmModule.forFeature([Outbox]), 
+        OutboxModule,                       
+        RedisModule,],
     controllers: [ProcessingController],
     providers: [
         ProcessingService,
@@ -16,6 +22,7 @@ import { OutboxModule } from '../outbox/outbox.module';
         AIService,
         MediaClientService,
         MediaUploadService,
+        HttpOutboxService,
     ],
     exports: [ProcessingService],
 })

@@ -15,8 +15,11 @@ export class Outbox {
         type: 'jsonb',
         nullable: false,
     })
-    data: JSON;
+    data: any;
 
     @Column({ name: 'created_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
-    createdAt: Date;
+    createdAt: Date | null;
+
+    @Column({name: 'processed_at',type: 'timestamptz',nullable: true})
+    processedAt: Date | null;
 }

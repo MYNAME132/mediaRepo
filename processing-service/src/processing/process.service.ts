@@ -31,27 +31,30 @@ export class ProcessingService {
             console.log('[PROCESS] AI model completed');
 
             const newFileName = `processed-${media.name}`;
-            
-            const updatePayload = {
-                mediaId,
-                buffer: processedBuffer.toString('base64'),
-                filename: newFileName,
-                mimeType: media.type,
-                orgId,
-                updateMediaDTO: {
-                    modelId: media.modelId,
-                    modelType: media.modelType,
-                    signedUrl: true,
-                }
-            };
-            await this.httpOutbox.sendHttpEvent(
-                'media/update', 
-                updatePayload,
+
+            await this.httpOutbox.saveHttpOutboxEvent(
+                {
+                    method: 'PUT',
+                    url: `${process.env.MEDIA_SERVICE_URL}/media/${mediaId}`,
+                    headers: {
+                        'x-organization': orgId,
+                    },
+                    file: {
+                        bufferBase64: processedBuffer.toString('base64'),
+                        filename: newFileName,
+                        mimeType: media.type,
+                    },
+                    body: {
+                        modelId: media.modelId,
+                        modelType: media.modelType,
+                        signedUrl: true,
+                    },
+                },
                 'media',
                 manager
             );
 
-            console.log('[PROCESS] Update request saved to outbox');
+            console.log('[PROCESS] Media updated through Media Service API');
 
             return {
                 status: 'ok',

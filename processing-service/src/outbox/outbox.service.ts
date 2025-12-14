@@ -4,6 +4,8 @@ import { Outbox } from './entity/outbox.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import axios, { AxiosRequestConfig } from 'axios';
+import { MediaUploadService } from '../http-service/media-update.service';
+import { HttpOutboxPayload } from './dto/payload.interfce';
 
 @Injectable()
 export class HttpOutboxService {
@@ -14,6 +16,7 @@ export class HttpOutboxService {
         @InjectRepository(Outbox)
         private readonly outboxRepository: Repository<Outbox>,
         @Inject('REDIS_CLIENT') private readonly redis: Redis,
+        private readonly mediaUploadService: MediaUploadService,
     ) { }
 
     /**
@@ -25,42 +28,79 @@ export class HttpOutboxService {
      * @param config - Axios config
      */
 
-    async sendHttpEvent(
-        url: string,
-        data: any,
+    async saveHttpOutboxEvent(
+        payload: HttpOutboxPayload,
         entity: string,
-        transactionalEntityManager?: EntityManager,
-        config?: AxiosRequestConfig,
-    ): Promise<void> {
-        try {
-            await axios.post(url, data, config);
-        } catch (err) {
-            this.logger.warn(`HTTP request failed, saving to Redis: ${err.message}`);
+        transactionalEntityManager: EntityManager,
+    ) {
+        const outboxItem = this.outboxRepository.create({
+            topic: payload.url,
+            entity,
+            data: payload,
+        });
 
-            const payload = { url, data, entity, createdAt: new Date() };
+        await transactionalEntityManager.save(Outbox, outboxItem);
+    }
 
+
+    private async executeHttpPayload(payload: HttpOutboxPayload) {
+        if (payload.method === 'PUT' && payload.file) {
+            const mediaId = payload.url.split('/').pop();
+
+            if (!mediaId) {
+                throw new Error('Invalid mediaId in payload URL');
+            }
+
+            const orgId = payload.headers?.['x-organization'];
+
+            if (!orgId) {
+                throw new Error('Missing x-organization header in outbox payload');
+            }
+
+
+            await this.mediaUploadService.updateMediaFile(
+                mediaId,
+                Buffer.from(payload.file.bufferBase64, 'base64'),
+                payload.file.filename,
+                payload.file.mimeType,
+                orgId,
+                payload.body,
+            );
+            return;
+        }
+
+        await axios.request({
+            method: payload.method,
+            url: payload.url,
+            data: payload.body,
+            headers: payload.headers,
+        });
+    }
+
+
+    async processOutbox(): Promise<void> {
+        const items = await this.outboxRepository.find({
+            where: {
+                processedAt: null as any,
+            },
+            order: { createdAt: 'ASC' },
+            take: 20,
+        });
+
+        for (const item of items) {
             try {
-                await this.redis.lpush(this.REDIS_KEY, JSON.stringify(payload));
-            } catch (redisErr) {
+                await this.executeHttpPayload(item.data);
+
+                item.processedAt = new Date();
+                await this.outboxRepository.save(item);
+
+            } catch (err) {
                 this.logger.warn(
-                    `Redis unavailable, saving to Postgres outbox: ${redisErr.message}`,
+                    `Outbox item ${item.id} failed, will retry: ${err.message}`,
                 );
-
-                const outboxItem = this.outboxRepository.create({
-                    topic: url,
-                    entity,
-                    data,
-                });
-
-                if (transactionalEntityManager) {
-                    await transactionalEntityManager.save(Outbox, outboxItem);
-                } else {
-                    await this.outboxRepository.save(outboxItem);
-                }
             }
         }
     }
-
 
     async flushRedisOutbox(): Promise<void> {
         try {
